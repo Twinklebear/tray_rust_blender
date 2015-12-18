@@ -65,54 +65,102 @@ camera = {
 }
 print("camera = {}".format(json.dumps(camera, indent=4)))
 
-# Just a hacked in hardcoded light for now
-objects = [
-{
-    "name": "light",
-    "type": "emitter",
-    "material": "white_wall",
-    "emitter": "area",
-    "emission": [1, 0.772549, 0.560784, 40],
-    "geometry": {
-        "type": "sphere",
-        "radius": 3.5,
-        "inner_radius": 0.0
-    },
-    "transform": [
-        {
-            "type": "rotate_x",
-            "rotation": 90
-        },
-        {
-            "type": "translate",
-            "translation": [0, 23.8, 0]
-        }
-    ]
-}]
-
+objects = []
 obj_file = "test.obj"
 # Add the scene objects
 for name, obj in scene.objects.items():
-    # TODO: How to properly filter out the camera and other junk here?
-    if name == "Area" or name == "Camera":
-        continue
-    print("Appending {} to the objects".format(name))
-    objects.append({
-        "name": name,
-        "type": "receiver",
-        "material": "white_wall",
-        "geometry": {
-            "type": "mesh",
-            "file": obj_file,
-            "model": name,
-        },
-        "transform": []
-    })
-
+    print("Appending {} to the objects, type = {}".format(name, obj.type))
+    # Append all the meshes in the scene
+    if obj.type == "MESH":
+        obj.select = True
+        objects.append({
+            "name": name,
+            "type": "receiver",
+            "material": "white_wall",
+            "geometry": {
+                "type": "mesh",
+                "file": obj_file,
+                "model": name,
+            },
+            "transform": []
+        })
+    # Convert meta balls to analytic spheres
+    if obj.type == "META":
+        obj.select = False
+        obj_mat = transform_mat.inverted() * obj.matrix_world * transform_mat * mathutils.Matrix.Rotation(math.radians(90), 4, "X")
+        objects.append({
+            "name": name,
+            "type": "receiver",
+            "material": "white_wall",
+            "geometry": {
+                "type": "sphere",
+                "radius": 1
+            },
+            "transform": [
+                {
+                    "type": "matrix",
+                    "matrix": [obj_mat[0][0:], obj_mat[1][0:], obj_mat[2][0:], obj_mat[3][0:]]
+                },
+                {
+                    "type": "scale",
+                    "scaling": [-1, 1, 1]
+                }
+            ]
+        })
+    # Export lights
+    if obj.type == "LAMP":
+        lamp = bpy.data.lamps[name]
+        # TODO: Point lights
+        if lamp.type == "POINT":
+            pos, _, _ = obj.matrix_world.decompose()
+            objects.append({
+                "name": name,
+                "type": "emitter",
+                "emitter": "point",
+                "emission": [0.780131, 0.780409, 0.775833, 100],
+                "position": [pos[0], pos[2], pos[1]],
+                "transform": []
+            })
+        elif lamp.type == "AREA":
+            obj_mat = transform_mat.inverted() * obj.matrix_world * transform_mat * mathutils.Matrix.Rotation(math.radians(90), 4, "X")
+            lamp_geometry = {}
+            # TODO: Sphere and disk lights
+            if lamp.shape == "SQUARE":
+                lamp_geometry = {
+                    "type": "rectangle",
+                    "width": lamp.size,
+                    "height": lamp.size
+                }
+            elif lamp.shape == "RECTANGLE":
+                lamp_geometry = {
+                    "type": "rectangle",
+                    "width": lamp.size,
+                    "height": lamp.size_y
+                }
+            # TODO: Configuring light properties
+            objects.append({
+                "name": name,
+                "type": "emitter",
+                "material": "white_wall",
+                "emitter": "area",
+                "emission": [0.780131, 0.780409, 0.775833, 100],
+                "geometry": lamp_geometry,
+                "transform": [
+                    {
+                        "type": "matrix",
+                        "matrix": [obj_mat[0][0:], obj_mat[1][0:], obj_mat[2][0:], obj_mat[3][0:]]
+                    },
+                    {
+                        "type": "scale",
+                        "scaling": [-1, 1, 1]
+                    }
+                ]
+            })
 
 # Save out the OBJ containing all our meshes
 bpy.ops.export_scene.obj("EXEC_DEFAULT", False, filepath=filepath + "test.obj",
-    axis_forward="Z", use_materials=False, use_uvs=True, use_normals=True, use_triangles=True)
+    axis_forward="Z", use_materials=False, use_uvs=True, use_normals=True,
+    use_triangles=True, use_selection=True)
 
 # Save out the JSON scene file
 scene_file = "test.json"
