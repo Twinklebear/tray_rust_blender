@@ -7,9 +7,9 @@ filepath = "C:/Users/Will/Desktop/"
 
 # TODO: Hardcoded film properties for now
 film = {
-    "width": 1280,
-    "height": 720,
-    "samples": 2,
+    "width": bpy.data.scenes["Scene"].render.resolution_x,
+    "height": bpy.data.scenes["Scene"].render.resolution_y,
+    "samples": bpy.data.scenes["Scene"].cycles.samples,
     "frames": 1,
     "start_frame": 0,
     "end_frame": 0,
@@ -48,8 +48,10 @@ print(camera.matrix_world)
 
 transform_mat = mathutils.Matrix([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
 mat = transform_mat.inverted() * cam_mat * transform_mat * mathutils.Matrix.Rotation(math.radians(90), 4, "X")
+# TODO: FOV computation is not quite correct, we don't match. Is the FOV we get from Blender via
+# bpy.data.camera["Camera"].angle the vertical or horizontal FOV?
 camera = {
-    "fov": 65,
+    "fov": math.degrees(bpy.data.cameras["Camera"].angle) / (film["width"] / film["height"]),
     "transform": [
         {
             "type": "matrix",
@@ -110,7 +112,7 @@ for name, obj in scene.objects.items():
 
 # Save out the OBJ containing all our meshes
 bpy.ops.export_scene.obj("EXEC_DEFAULT", False, filepath=filepath + "test.obj",
-    axis_forward="Z", use_materials=False, use_triangles=True)
+    axis_forward="Z", use_materials=False, use_uvs=True, use_normals=True, use_triangles=True)
 
 # Save out the JSON scene file
 scene_file = "test.json"
