@@ -72,7 +72,7 @@ objects = [
     "emitter": "area",
     "emission": [1, 0.772549, 0.560784, 40],
     "geometry": {
-        "type": "sphere", 
+        "type": "sphere",
         "radius": 3.5,
         "inner_radius": 0.0
     },
