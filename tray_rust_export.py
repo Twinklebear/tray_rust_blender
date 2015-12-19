@@ -3,6 +3,11 @@ import math
 import mathutils
 import json
 
+# Convert a matrix from Blender's coordinate system to tray_rust's
+def convert_blender_matrix(mat):
+    transform_mat = mathutils.Matrix([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
+    return mathutils.Matrix.Scale(-1, 4, [1, 0, 0]) * transform_mat.inverted() * mat * transform_mat * mathutils.Matrix.Rotation(math.radians(90), 4, "X")
+
 filepath = "C:/Users/Will/Desktop/"
 
 # TODO: Hardcoded film properties for now
@@ -46,20 +51,13 @@ camera = scene.objects["Camera"]
 cam_mat = camera.matrix_world
 print(camera.matrix_world)
 
-transform_mat = mathutils.Matrix([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
-mat = transform_mat.inverted() * cam_mat * transform_mat * mathutils.Matrix.Rotation(math.radians(90), 4, "X")
-# TODO: FOV computation is not quite correct, we don't match. Is the FOV we get from Blender via
-# bpy.data.camera["Camera"].angle the vertical or horizontal FOV?
+cam_mat = convert_blender_matrix(cam_mat)
 camera = {
     "fov": math.degrees(bpy.data.cameras["Camera"].angle_y),
     "transform": [
         {
             "type": "matrix",
-            "matrix": [mat[0][0:], mat[1][0:], mat[2][0:], mat[3][0:]]
-        },
-        {
-            "type": "scale",
-            "scaling": [-1, 1, 1]
+            "matrix": [cam_mat[0][0:], cam_mat[1][0:], cam_mat[2][0:], cam_mat[3][0:]]
         }
     ]
 }
@@ -87,7 +85,7 @@ for name, obj in scene.objects.items():
     # Convert meta balls to analytic spheres
     if obj.type == "META":
         obj.select = False
-        obj_mat = transform_mat.inverted() * obj.matrix_world * transform_mat * mathutils.Matrix.Rotation(math.radians(90), 4, "X")
+        obj_mat = convert_blender_matrix(obj.matrix_world)
         objects.append({
             "name": name,
             "type": "receiver",
@@ -100,10 +98,6 @@ for name, obj in scene.objects.items():
                 {
                     "type": "matrix",
                     "matrix": [obj_mat[0][0:], obj_mat[1][0:], obj_mat[2][0:], obj_mat[3][0:]]
-                },
-                {
-                    "type": "scale",
-                    "scaling": [-1, 1, 1]
                 }
             ]
         })
@@ -122,7 +116,7 @@ for name, obj in scene.objects.items():
                 "transform": []
             })
         elif lamp.type == "AREA":
-            obj_mat = transform_mat.inverted() * obj.matrix_world * transform_mat * mathutils.Matrix.Rotation(math.radians(90), 4, "X")
+            obj_mat = convert_blender_matrix(obj.matrix_world)
             lamp_geometry = {}
             # TODO: Sphere and disk lights
             if lamp.shape == "SQUARE":
@@ -149,10 +143,6 @@ for name, obj in scene.objects.items():
                     {
                         "type": "matrix",
                         "matrix": [obj_mat[0][0:], obj_mat[1][0:], obj_mat[2][0:], obj_mat[3][0:]]
-                    },
-                    {
-                        "type": "scale",
-                        "scaling": [-1, 1, 1]
                     }
                 ]
             })
