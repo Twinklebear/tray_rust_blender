@@ -51,7 +51,7 @@ mat = transform_mat.inverted() * cam_mat * transform_mat * mathutils.Matrix.Rota
 # TODO: FOV computation is not quite correct, we don't match. Is the FOV we get from Blender via
 # bpy.data.camera["Camera"].angle the vertical or horizontal FOV?
 camera = {
-    "fov": math.degrees(bpy.data.cameras["Camera"].angle) / (film["width"] / film["height"]),
+    "fov": math.degrees(bpy.data.cameras["Camera"].angle_y),
     "transform": [
         {
             "type": "matrix",
