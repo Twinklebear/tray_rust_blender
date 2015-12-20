@@ -104,16 +104,19 @@ for name, obj in scene.objects.items():
     # Export lights
     if obj.type == "LAMP":
         lamp = bpy.data.lamps[name]
-        # TODO: Point lights
         if lamp.type == "POINT":
-            pos, _, _ = obj.matrix_world.decompose()
+            obj_mat = convert_blender_matrix(obj.matrix_world)
             objects.append({
                 "name": name,
                 "type": "emitter",
                 "emitter": "point",
                 "emission": [0.780131, 0.780409, 0.775833, 100],
-                "position": [pos[0], pos[2], pos[1]],
-                "transform": []
+                "transform": [
+                    {
+                        "type": "matrix",
+                        "matrix": [obj_mat[0][0:], obj_mat[1][0:], obj_mat[2][0:], obj_mat[3][0:]]
+                    }
+                ]
             })
         elif lamp.type == "AREA":
             obj_mat = convert_blender_matrix(obj.matrix_world)
