@@ -48,6 +48,7 @@ print("materials = {}".format(json.dumps(materials, indent=4)))
 
 scene = bpy.context.scene
 camera = scene.objects["Camera"]
+camera.select = False
 cam_mat = camera.matrix_world
 print(camera.matrix_world)
 
@@ -63,6 +64,7 @@ camera = {
 }
 print("camera = {}".format(json.dumps(camera, indent=4)))
 
+mesh_transforms = {}
 objects = []
 obj_file = "test.obj"
 # Add the scene objects
@@ -70,6 +72,9 @@ for name, obj in scene.objects.items():
     print("Appending {} to the objects, type = {}".format(name, obj.type))
     # Append all the meshes in the scene
     if obj.type == "MESH":
+        transform_mat = mathutils.Matrix([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
+        obj_mat = mathutils.Matrix.Scale(-1, 4, [1, 0, 0]) * transform_mat.inverted() * obj.matrix_world * transform_mat
+        mesh_transforms[name] = obj.matrix_world.copy()
         obj.select = True
         objects.append({
             "name": name,
@@ -80,7 +85,12 @@ for name, obj in scene.objects.items():
                 "file": obj_file,
                 "model": name,
             },
-            "transform": []
+            "transform": [
+                {
+                    "type": "matrix",
+                    "matrix": [obj_mat[0][0:], obj_mat[1][0:], obj_mat[2][0:], obj_mat[3][0:]]
+                }
+            ]
         })
     # Convert meta balls to analytic spheres
     if obj.type == "META":
@@ -103,6 +113,7 @@ for name, obj in scene.objects.items():
         })
     # Export lights
     if obj.type == "LAMP":
+        obj.select = False
         lamp = bpy.data.lamps[name]
         if lamp.type == "POINT":
             obj_mat = convert_blender_matrix(obj.matrix_world)
@@ -150,10 +161,21 @@ for name, obj in scene.objects.items():
                 ]
             })
 
+# Reset all transformations
+bpy.ops.object.location_clear()
+bpy.ops.object.rotation_clear()
+bpy.ops.object.scale_clear()
+
 # Save out the OBJ containing all our meshes
 bpy.ops.export_scene.obj("EXEC_DEFAULT", False, filepath=filepath + "test.obj",
-    axis_forward="Z", use_materials=False, use_uvs=True, use_normals=True,
+    axis_forward="Z", axis_up="Y", use_materials=False, use_uvs=True, use_normals=True,
     use_triangles=True, use_selection=True)
+
+# Restore all transformations
+for name, obj in scene.objects.items():
+    if obj.type == "MESH":
+        obj.matrix_world = mesh_transforms[name]
+        obj.select = False
 
 # Save out the JSON scene file
 scene_file = "test.json"
