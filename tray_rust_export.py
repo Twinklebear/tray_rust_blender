@@ -12,15 +12,15 @@ def convert_blender_matrix(mat):
 
 filepath = "C:/Users/Will/Desktop/"
 
-# TODO: Hardcoded film properties for now
+scene = bpy.context.scene
 film = {
-    "width": bpy.data.scenes["Scene"].render.resolution_x,
-    "height": bpy.data.scenes["Scene"].render.resolution_y,
-    "samples": bpy.data.scenes["Scene"].cycles.samples,
-    "frames": 1,
-    "start_frame": 0,
-    "end_frame": 0,
-    "scene_time": 0,
+    "width": scene.render.resolution_x,
+    "height": scene.render.resolution_y,
+    "samples": scene.cycles.samples,
+    "frames": scene.frame_end - scene.frame_start + 1,
+    "start_frame": scene.frame_start - 1,
+    "end_frame": scene.frame_end - 1,
+    "scene_time": (scene.frame_end - scene.frame_start + 1) / scene.render.fps,
     "filter" : {
         "type": "mitchell_netravali",
         "width": 2.0,
@@ -43,43 +43,62 @@ materials = [
     }
 ]
 
-print("\n\n\n\n\n\n\n")
-print("film = {}".format(json.dumps(film, indent=4)))
-print("integrator = {}".format(json.dumps(integrator, indent=4)))
-print("materials = {}".format(json.dumps(materials, indent=4)))
-
-scene = bpy.context.scene
 camera = scene.objects["Camera"]
 camera.select = False
-cam_mat = camera.matrix_world
-print(camera.matrix_world)
-
-cam_mat = convert_blender_matrix(cam_mat)
-camera = {
-    "fov": math.degrees(bpy.data.cameras["Camera"].angle_y),
-    "transform": [
-        {
-            "type": "matrix",
-            "matrix": [cam_mat[0][0:], cam_mat[1][0:], cam_mat[2][0:], cam_mat[3][0:]]
-        }
-    ]
+camera_json = {
+    "fov": math.degrees(bpy.data.cameras[camera.name].angle_y),
 }
-print("camera = {}".format(json.dumps(camera, indent=4)))
+
+if camera.animation_data and camera.animation_data.action:
+    print("Animation data for {} = {}".format("Camera", camera.animation_data))
+    print("frame range = {}".format(camera.animation_data.action.frame_range))
+    frame_time = 1.0 / scene.render.fps
+    knots = []
+    control_points = []
+    anim_data = camera.animation_data
+    start = int(anim_data.action.frame_range[0])
+    end = int(math.ceil(anim_data.action.frame_range[1]))
+    knots.append(start)
+    for f in range(start, end + 1):
+        scene.frame_set(f)
+        cam_mat = convert_blender_matrix(camera.matrix_world)
+        knots.append(f * frame_time)
+        control_points.append({
+            "transform": [
+                {
+                    "type": "matrix",
+                    "matrix": [cam_mat[0][0:], cam_mat[1][0:], cam_mat[2][0:], cam_mat[3][0:]]
+                }
+            ]})
+    knots.append(end)
+
+    scene.frame_set(1)
+    camera_json["keyframes"] = {
+            "control_points": control_points,
+            "knots": knots,
+            "degree": 1
+        }
+else:
+    cam_mat = convert_blender_matrix(camera.matrix_world)
+    camera_json["transform"] = [
+            {
+                "type": "matrix",
+                "matrix": [cam_mat[0][0:], cam_mat[1][0:], cam_mat[2][0:], cam_mat[3][0:]]
+            }
+        ]
+
+print("camera = {}".format(json.dumps(camera_json, indent=4)))
 
 match_instance = re.compile("(\w+)\.\d+")
 mesh_transforms = {}
 objects = []
 obj_file = "test.obj"
+
 # Add the scene objects
 for name, obj in scene.objects.items():
     print("Appending {} to the objects, type = {}".format(name, obj.type))
     # Append all the meshes in the scene
     if obj.type == "MESH":
-        # Note: We don't perform the X rotation on meshes because they get rotated when exporting to the OBJ file
-        transform_mat = mathutils.Matrix([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
-        obj_mat = mathutils.Matrix.Scale(-1, 4, [1, 0, 0]) * transform_mat.inverted() \
-                * obj.matrix_world * transform_mat
-        mesh_transforms[name] = obj.matrix_world.copy()
         # Check if this is an instance or a "real" object
         instance = match_instance.match(name)
         geometry = {}
@@ -100,19 +119,56 @@ for name, obj in scene.objects.items():
                 "file": obj_file,
                 "model": name,
             }
-
         objects.append({
             "name": name,
             "type": "receiver",
             "material": "white_wall",
             "geometry": geometry,
-            "transform": [
-                {
-                    "type": "matrix",
-                    "matrix": [obj_mat[0][0:], obj_mat[1][0:], obj_mat[2][0:], obj_mat[3][0:]]
-                }
-            ]
         })
+
+        mesh_transforms[name] = obj.matrix_world.copy()
+        # Note: We don't perform the X rotation on meshes because they get rotated when exporting to the OBJ file
+        transform_mat = mathutils.Matrix([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
+        if obj.animation_data and obj.animation_data.action:
+            print("Animation data for {} = {}".format(name, obj.animation_data))
+            print("frame range = {}".format(obj.animation_data.action.frame_range))
+            frame_time = 1.0 / scene.render.fps
+            knots = []
+            control_points = []
+            anim_data = obj.animation_data
+            start = int(anim_data.action.frame_range[0])
+            end = int(math.ceil(anim_data.action.frame_range[1]))
+            knots.append(start)
+            for f in range(start, end + 1):
+                scene.frame_set(f)
+                obj_mat = mathutils.Matrix.Scale(-1, 4, [1, 0, 0]) * transform_mat.inverted() \
+                        * obj.matrix_world * transform_mat
+                knots.append(f * frame_time)
+                control_points.append({
+                    "transform": [
+                        {
+                            "type": "matrix",
+                            "matrix": [obj_mat[0][0:], obj_mat[1][0:], obj_mat[2][0:], obj_mat[3][0:]]
+                        }
+                    ]})
+            knots.append(end)
+
+            scene.frame_set(1)
+            objects[-1]["keyframes"] = {
+                    "control_points": control_points,
+                    "knots": knots,
+                    "degree": 1
+                }
+        else:
+            obj_mat = mathutils.Matrix.Scale(-1, 4, [1, 0, 0]) * transform_mat.inverted() \
+                    * obj.matrix_world * transform_mat
+            objects[-1]["transform"] = [
+                    {
+                        "type": "matrix",
+                        "matrix": [obj_mat[0][0:], obj_mat[1][0:], obj_mat[2][0:], obj_mat[3][0:]]
+                    }
+                ]
+
     # Convert meta balls to analytic spheres
     if obj.type == "META":
         obj.select = False
@@ -202,7 +258,7 @@ for name, obj in scene.objects.items():
 scene_file = "test.json"
 scene = {
     "film": film,
-    "camera": camera,
+    "camera": camera_json,
     "integrator": integrator,
     "materials": materials,
     "objects": objects
