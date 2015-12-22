@@ -2,11 +2,13 @@ import bpy
 import math
 import mathutils
 import json
+import re
 
 # Convert a matrix from Blender's coordinate system to tray_rust's
 def convert_blender_matrix(mat):
     transform_mat = mathutils.Matrix([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
-    return mathutils.Matrix.Scale(-1, 4, [1, 0, 0]) * transform_mat.inverted() * mat * transform_mat * mathutils.Matrix.Rotation(math.radians(90), 4, "X")
+    return mathutils.Matrix.Scale(-1, 4, [1, 0, 0]) * transform_mat.inverted() * mat \
+        * transform_mat * mathutils.Matrix.Rotation(math.radians(90), 4, "X")
 
 filepath = "C:/Users/Will/Desktop/"
 
@@ -64,6 +66,7 @@ camera = {
 }
 print("camera = {}".format(json.dumps(camera, indent=4)))
 
+match_instance = re.compile("(\w+)\.\d+")
 mesh_transforms = {}
 objects = []
 obj_file = "test.obj"
@@ -72,19 +75,37 @@ for name, obj in scene.objects.items():
     print("Appending {} to the objects, type = {}".format(name, obj.type))
     # Append all the meshes in the scene
     if obj.type == "MESH":
+        # Note: We don't perform the X rotation on meshes because they get rotated when exporting to the OBJ file
         transform_mat = mathutils.Matrix([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
-        obj_mat = mathutils.Matrix.Scale(-1, 4, [1, 0, 0]) * transform_mat.inverted() * obj.matrix_world * transform_mat
+        obj_mat = mathutils.Matrix.Scale(-1, 4, [1, 0, 0]) * transform_mat.inverted() \
+                * obj.matrix_world * transform_mat
         mesh_transforms[name] = obj.matrix_world.copy()
-        obj.select = True
+        # Check if this is an instance or a "real" object
+        instance = match_instance.match(name)
+        geometry = {}
+        # If it's an instance we expect the real object to be exported without
+        # the .### in the name, so use that model in the OBJ file. To prevent exporting
+        # this object we also don't select it
+        if instance:
+            obj.select = False
+            geometry = {
+                "type": "mesh",
+                "file": obj_file,
+                "model": instance.group(1),
+            }
+        else:
+            obj.select = True
+            geometry = {
+                "type": "mesh",
+                "file": obj_file,
+                "model": name,
+            }
+
         objects.append({
             "name": name,
             "type": "receiver",
             "material": "white_wall",
-            "geometry": {
-                "type": "mesh",
-                "file": obj_file,
-                "model": name,
-            },
+            "geometry": geometry,
             "transform": [
                 {
                     "type": "matrix",
@@ -189,3 +210,4 @@ scene = {
 
 with open(filepath + scene_file, "w") as f:
     json.dump(scene, f, indent=4)
+
