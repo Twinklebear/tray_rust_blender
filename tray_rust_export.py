@@ -26,8 +26,8 @@ def export_animation(obj, mat_convert):
     anim_data = obj.animation_data
     start = int(anim_data.action.frame_range[0])
     end = int(math.ceil(anim_data.action.frame_range[1]))
-    knots.append(start)
-    for f in range(start, end + 1):
+    knots.append((start - 1) * frame_time)
+    for f in range(start - 1, end):
         scene.frame_set(f)
         mat = mat_convert(obj.matrix_world)
         knots.append(f * frame_time)
@@ -38,7 +38,7 @@ def export_animation(obj, mat_convert):
                     "matrix": [mat[0][0:], mat[1][0:], mat[2][0:], mat[3][0:]]
                 }
             ]})
-    knots.append(end)
+    knots.append((end - 1) * frame_time)
     scene.frame_set(1)
     return {
         "control_points": control_points,
