@@ -91,7 +91,7 @@ for name, obj in scene.objects.items():
             geometry = {
                 "type": "mesh",
                 "file": obj_file,
-                "model": instance.group(1),
+                "model": obj.data.name,
             }
         else:
             obj.select = True
