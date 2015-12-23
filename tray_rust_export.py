@@ -24,7 +24,7 @@ def convert_blender_matrix(mat):
 
 # Convert a matrix from Blender's OBJ export coordinate system to tray_rust's
 def convert_obj_matrix(mat):
-    return TRANSFORM_MAT.inverted() * mat * TRANSFORM_MAT
+    return TRANSFORM_MAT.inverted() * mat * mathutils.Matrix.Scale(-1, 4, [1, 0, 0]) * TRANSFORM_MAT
 
 # Sample and export the keyframes of the object's animation to a dict for saving to the scene file
 # mat_convert is a function that will convert the object's matrix to tray_rust's coordinate
@@ -117,7 +117,6 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
 
     # Add the scene objects
     for name, obj in scene.objects.items():
-        print("Appending {} to the objects, type = {}".format(name, obj.type))
         # Append all the meshes in the scene
         if obj.type == "MESH":
             print(obj.data.name)
@@ -154,7 +153,6 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
             })
 
             mesh_transforms[obj.name] = obj.matrix_world.copy()
-            # Note: We don't perform the X rotation on meshes because they get rotated when exporting to the OBJ file
             if obj.animation_data and obj.animation_data.action:
                 objects[-1]["keyframes"] = export_animation(obj, convert_obj_matrix, scene)
                 print("# of fcurves = {}".format(len(obj.animation_data.action.fcurves)))
