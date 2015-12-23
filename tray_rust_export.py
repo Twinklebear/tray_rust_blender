@@ -26,7 +26,6 @@ def export_animation(obj, mat_convert):
     anim_data = obj.animation_data
     start = int(anim_data.action.frame_range[0])
     end = int(math.ceil(anim_data.action.frame_range[1]))
-    print("start = {}, end = {}".format(start, end))
     knots.append((start - 1) * frame_time)
     for f in range(start - 1, end):
         scene.frame_set(f + 1)
@@ -149,7 +148,6 @@ for name, obj in scene.objects.items():
             print("# of fcurves = {}".format(len(obj.animation_data.action.fcurves)))
             # Mute keyframe animation so it doesn't block (location|rotation|scale)_clear
             for curve in obj.animation_data.action.fcurves:
-                print("muting curve")
                 curve.mute = True
         else:
             obj_mat = convert_obj_matrix(obj.matrix_world)
@@ -245,7 +243,6 @@ for name, obj in scene.objects.items():
         obj.matrix_world = mesh_transforms[obj.name]
         obj.select = False
         if obj.animation_data and obj.animation_data.action:
-            objects[-1]["keyframes"] = export_animation(obj, convert_obj_matrix)
             # Unmute keyframe animation to restore it
             for curve in obj.animation_data.action.fcurves:
                 curve.mute = False
