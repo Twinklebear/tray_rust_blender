@@ -109,6 +109,7 @@ for name, obj in scene.objects.items():
     print("Appending {} to the objects, type = {}".format(name, obj.type))
     # Append all the meshes in the scene
     if obj.type == "MESH":
+        print(obj.data.name)
         # Check if this is an instance or a "real" object
         instance = match_instance.match(name)
         geometry = {}
@@ -121,13 +122,18 @@ for name, obj in scene.objects.items():
                 "type": "mesh",
                 "file": obj_file,
                 "model": obj.data.name,
-            }
+                }
         else:
+            # Fix up any mis-named objects since the exported name in the OBJ will
+            # be name_obj.data.name in that case, which is more annoying to track
+            # down for instancing
+            if obj.data.name != obj.name:
+                obj.name = obj.data.name
             obj.select = True
             geometry = {
                 "type": "mesh",
                 "file": obj_file,
-                "model": name,
+                "model": obj.data.name,
             }
         objects.append({
             "name": name,
@@ -136,10 +142,15 @@ for name, obj in scene.objects.items():
             "geometry": geometry,
         })
 
-        mesh_transforms[name] = obj.matrix_world.copy()
+        mesh_transforms[obj.name] = obj.matrix_world.copy()
         # Note: We don't perform the X rotation on meshes because they get rotated when exporting to the OBJ file
         if obj.animation_data and obj.animation_data.action:
             objects[-1]["keyframes"] = export_animation(obj, convert_obj_matrix)
+            print("# of fcurves = {}".format(len(obj.animation_data.action.fcurves)))
+            # Mute keyframe animation so it doesn't block (location|rotation|scale)_clear
+            for curve in obj.animation_data.action.fcurves:
+                print("muting curve")
+                curve.mute = True
         else:
             obj_mat = convert_obj_matrix(obj.matrix_world)
             objects[-1]["transform"] = [
@@ -231,8 +242,13 @@ bpy.ops.export_scene.obj("EXEC_DEFAULT", False, filepath=filepath + "test.obj",
 # Restore all transformations
 for name, obj in scene.objects.items():
     if obj.type == "MESH":
-        obj.matrix_world = mesh_transforms[name]
+        obj.matrix_world = mesh_transforms[obj.name]
         obj.select = False
+        if obj.animation_data and obj.animation_data.action:
+            objects[-1]["keyframes"] = export_animation(obj, convert_obj_matrix)
+            # Unmute keyframe animation to restore it
+            for curve in obj.animation_data.action.fcurves:
+                curve.mute = False
 
 # Save out the JSON scene file
 scene_file = "test.json"
