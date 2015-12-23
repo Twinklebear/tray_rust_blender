@@ -20,12 +20,11 @@ TRANSFORM_MAT = mathutils.Matrix([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 
 
 # Convert a matrix from Blender's coordinate system to tray_rust's
 def convert_blender_matrix(mat):
-    return mathutils.Matrix.Scale(-1, 4, [1, 0, 0]) * TRANSFORM_MAT.inverted() * mat \
-        * TRANSFORM_MAT * mathutils.Matrix.Rotation(math.radians(90), 4, "X")
+    return TRANSFORM_MAT.inverted() * mat * TRANSFORM_MAT * mathutils.Matrix.Rotation(math.radians(90), 4, "X")
 
 # Convert a matrix from Blender's OBJ export coordinate system to tray_rust's
 def convert_obj_matrix(mat):
-    return mathutils.Matrix.Scale(-1, 4, [1, 0, 0]) * TRANSFORM_MAT.inverted() * mat * TRANSFORM_MAT
+    return TRANSFORM_MAT.inverted() * mat * TRANSFORM_MAT
 
 # Sample and export the keyframes of the object's animation to a dict for saving to the scene file
 # mat_convert is a function that will convert the object's matrix to tray_rust's coordinate
@@ -174,7 +173,7 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
         # Convert meta balls to analytic spheres
         if obj.type == "META":
             obj.select = False
-            obj_mat = convert_blender_matrix(obj.matrix_world)
+            obj_mat = convert_obj_matrix(obj.matrix_world)
             objects.append({
                 "name": name,
                 "type": "receiver",
@@ -291,7 +290,7 @@ def menu_func(self, context):
 
 def register():
     bpy.utils.register_module(__name__)
-    bpy.types.INFO_MT_file_export.append(menu_func)
+    #bpy.types.INFO_MT_file_export.append(menu_func)
 
 def unregister():
     bpy.utils.unregister_module(__name__)
