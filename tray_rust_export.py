@@ -57,9 +57,10 @@ def export_animation(obj, mat_convert, scene):
         "degree": 1
     }
 
-def export_tray_rust(operator, context, filepath="", check_existing=False):
+# Export the user's film settings to their tray_rust equivalents
+def export_film(operator, context):
     scene = context.scene
-    film = {
+    return {
         "width": scene.render.resolution_x,
         "height": scene.render.resolution_y,
         "samples": scene.cycles.samples,
@@ -75,12 +76,19 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
                 "c": 0.333333333333333333
         },
     }
-    integrator = {
-        "type": "normals_debug",
+
+# TODO: Maybe we could have some kind of UI for the integrator settings?
+def export_integrator(operator, context):
+    return {
+        "type": "pathtracer",
         "min_depth": 4,
         "max_depth": 8
     }
-    materials = [
+
+# TODO: Maybe we can add support for some of Blender's/Cycle's material models
+# and add UI for ones in tray_rust but not in Blender?
+def export_materials(operator, context):
+    return [
         {
             "type": "matte",
             "name": "white_wall",
@@ -89,8 +97,10 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
         }
     ]
 
+# Export the camera positon/motion from Blender
+def export_camera(operator, context):
+    scene = context.scene
     camera = scene.objects["Camera"]
-    camera.select = False
     camera_json = {
         "fov": math.degrees(bpy.data.cameras[camera.name].angle_y),
     }
@@ -105,13 +115,14 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
                     "matrix": [cam_mat[0][0:], cam_mat[1][0:], cam_mat[2][0:], cam_mat[3][0:]]
                 }
             ]
+    return camera_json
 
-    print("camera = {}".format(json.dumps(camera_json, indent=4)))
+def export_tray_rust(operator, context, filepath="", check_existing=False):
+    scene = context.scene
 
-    match_instance = re.compile("(\w+)\.\d+")
     mesh_transforms = {}
     objects = []
-    _, obj_file_name = os.path.split(filepath)
+    obj_path, obj_file_name = os.path.split(filepath)
     obj_file_name, _ = os.path.splitext(obj_file_name)
     obj_file_name += ".obj"
 
@@ -119,14 +130,11 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
     for name, obj in scene.objects.items():
         # Append all the meshes in the scene
         if obj.type == "MESH":
-            print(obj.data.name)
-            # Check if this is an instance or a "real" object
-            instance = match_instance.match(name)
             geometry = {}
             # If it's an instance we expect the real object to be exported without
             # the .### in the name, so use that model in the OBJ file. To prevent exporting
             # this object we also don't select it
-            if instance:
+            if obj.name != obj.data.name:
                 obj.select = False
                 geometry = {
                     "type": "mesh",
@@ -134,11 +142,6 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
                     "model": obj.data.name,
                     }
             else:
-                # Fix up any mis-named objects since the exported name in the OBJ will
-                # be name_obj.data.name in that case, which is more annoying to track
-                # down for instancing
-                if obj.data.name != obj.name:
-                    obj.name = obj.data.name
                 obj.select = True
                 geometry = {
                     "type": "mesh",
@@ -155,7 +158,6 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
             mesh_transforms[obj.name] = obj.matrix_world.copy()
             if obj.animation_data and obj.animation_data.action:
                 objects[-1]["keyframes"] = export_animation(obj, convert_obj_matrix, scene)
-                print("# of fcurves = {}".format(len(obj.animation_data.action.fcurves)))
                 # Mute keyframe animation so it doesn't block (location|rotation|scale)_clear
                 for curve in obj.animation_data.action.fcurves:
                     curve.mute = True
@@ -237,14 +239,16 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
                     ]
                 })
 
+    # Make sure the camera isn't selected before clearing position data
+    camera = scene.objects["Camera"].select = False
+
     # Reset all transformations
     bpy.ops.object.location_clear()
     bpy.ops.object.rotation_clear()
     bpy.ops.object.scale_clear()
 
     # Save out the OBJ containing all our meshes
-    obj_path, _ = os.path.splitext(filepath)
-    bpy.ops.export_scene.obj("EXEC_DEFAULT", False, filepath=obj_path + ".obj",
+    bpy.ops.export_scene.obj("EXEC_DEFAULT", False, filepath=obj_path + "/" + obj_file_name,
         axis_forward="Z", axis_up="Y", use_materials=False, use_uvs=True, use_normals=True,
         use_triangles=True, use_selection=True)
 
@@ -260,10 +264,10 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
 
     # Save out the JSON scene file
     scene = {
-        "film": film,
-        "camera": camera_json,
-        "integrator": integrator,
-        "materials": materials,
+        "film": export_film(operator, context),
+        "camera": export_camera(operator, context),
+        "integrator": export_integrator(operator, context),
+        "materials": export_materials(operator, context),
         "objects": objects
     }
     with open(filepath, "w") as f:
