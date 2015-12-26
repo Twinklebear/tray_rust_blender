@@ -117,7 +117,7 @@ def export_camera(operator, context):
             ]
     return camera_json
 
-def export_mesh(obj, obj_file_name, mesh_transforms):
+def export_mesh(obj, obj_file_name, mesh_transforms, scene):
     geometry = {}
     # If it's an instance we expect the real object to be exported without
     # the .### in the name, so use that model in the OBJ file. To prevent exporting
@@ -240,7 +240,7 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
     for name, obj in scene.objects.items():
         # Append all the meshes in the scene
         if obj.type == "MESH":
-            objects.append(export_mesh(obj, obj_file_name, mesh_transforms))
+            objects.append(export_mesh(obj, obj_file_name, mesh_transforms, scene))
         # Convert meta balls to analytic spheres
         elif obj.type == "META":
             objects.append(export_metaball(obj))
