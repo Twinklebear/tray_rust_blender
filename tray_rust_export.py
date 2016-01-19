@@ -10,7 +10,7 @@ bl_info = {
     "name": "tray_rust export",
     "author": "Will Usher",
     "blender": (2, 7, 6),
-    "version": (0, 0, 1),
+    "version": (0, 0, 3),
     "location": "File > Import-Export",
     "description": "Export the scene to a tray_rust scene",
     "category": "Import-Export"
@@ -98,24 +98,32 @@ def export_materials(operator, context):
     ]
 
 # Export the camera positon/motion from Blender
-def export_camera(operator, context):
+def export_cameras(operator, context):
     scene = context.scene
-    camera = scene.objects["Camera"]
-    camera_json = {
-        "fov": math.degrees(bpy.data.cameras[camera.name].angle_y),
-    }
-
-    if camera.animation_data and camera.animation_data.action:
-        camera_json["keyframes"] = export_animation(camera, convert_blender_matrix, scene)
-    else:
-        cam_mat = convert_blender_matrix(camera.matrix_world)
-        camera_json["transform"] = [
-                {
-                    "type": "matrix",
-                    "matrix": [cam_mat[0][0:], cam_mat[1][0:], cam_mat[2][0:], cam_mat[3][0:]]
-                }
-            ]
-    return camera_json
+    markers = scene.timeline_markers
+    cameras = []
+    for name, obj in scene.objects.items():
+        if obj.type == "CAMERA":
+            camera_json = {
+                "fov": math.degrees(bpy.data.cameras[name].angle_y),
+            }
+            if obj.animation_data and obj.animation_data.action:
+                camera_json["keyframes"] = export_animation(obj, convert_blender_matrix, scene)
+            else:
+                cam_mat = convert_blender_matrix(obj.matrix_world)
+                camera_json["transform"] = [
+                    {
+                        "type": "matrix",
+                        "matrix": [cam_mat[0][0:], cam_mat[1][0:], cam_mat[2][0:], cam_mat[3][0:]]
+                    }
+                ]
+                camera_json["active_at"] = 0
+            # See if we can find a timeline marker that makes this camera active
+            for m in markers:
+                if obj == m.camera:
+                    camera_json["active_at"] = m.frame - 1
+            cameras.append(camera_json)
+    return cameras
 
 def export_mesh(obj, obj_file_name, mesh_transforms, scene):
     geometry = {}
@@ -274,7 +282,7 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
     # Save out the JSON scene file
     scene = {
         "film": export_film(operator, context),
-        "camera": export_camera(operator, context),
+        "cameras": export_cameras(operator, context),
         "integrator": export_integrator(operator, context),
         "materials": export_materials(operator, context),
         "objects": objects
