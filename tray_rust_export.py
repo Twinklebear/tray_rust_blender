@@ -117,7 +117,7 @@ def export_cameras(operator, context):
                         "matrix": [cam_mat[0][0:], cam_mat[1][0:], cam_mat[2][0:], cam_mat[3][0:]]
                     }
                 ]
-                camera_json["active_at"] = 0
+            camera_json["active_at"] = 0
             # See if we can find a timeline marker that makes this camera active
             for m in markers:
                 if obj == m.camera:
