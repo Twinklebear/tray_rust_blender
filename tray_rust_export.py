@@ -10,7 +10,7 @@ bl_info = {
     "name": "tray_rust export",
     "author": "Will Usher",
     "blender": (2, 7, 6),
-    "version": (0, 0, 3),
+    "version": (0, 0, 4),
     "location": "File > Import-Export",
     "description": "Export the scene to a tray_rust scene",
     "category": "Import-Export"
@@ -104,9 +104,30 @@ def export_cameras(operator, context):
     cameras = []
     for name, obj in scene.objects.items():
         if obj.type == "CAMERA":
-            camera_json = {
-                "fov": math.degrees(bpy.data.cameras[name].angle_y),
-            }
+            camera_json = {}
+            # Check if the camera fov is animating
+            cam = bpy.data.cameras[name]
+            if cam.animation_data and cam.animation_data.action and cam.animation_data.action.id_root == "CAMERA":
+                scene.frame_set(1)
+                frame_time = 1.0 / scene.render.fps
+                knots = []
+                control_points = []
+                anim_data = cam.animation_data
+                start = int(anim_data.action.frame_range[0])
+                end = int(math.ceil(anim_data.action.frame_range[1]))
+                knots.append((start - 1) * frame_time)
+                for f in range(start - 1, end):
+                    scene.frame_set(f + 1)
+                    knots.append(f * frame_time)
+                    control_points.append(math.degrees(cam.angle_y))
+                knots.append((end - 1) * frame_time)
+                scene.frame_set(1)
+                camera_json["fov"] = control_points
+                camera_json["fov_knots"] = knots
+                camera_json["fov_spline_degree"] = 1
+            else:
+                camera_json["fov"] = math.degrees(cam.angle_y),
+            # Check if the camera object is moving
             if obj.animation_data and obj.animation_data.action:
                 camera_json["keyframes"] = export_animation(obj, convert_blender_matrix, scene)
             else:
