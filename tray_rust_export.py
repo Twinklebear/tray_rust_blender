@@ -10,7 +10,7 @@ bl_info = {
     "name": "tray_rust export",
     "author": "Will Usher",
     "blender": (2, 7, 6),
-    "version": (0, 0, 4),
+    "version": (0, 0, 5),
     "location": "File > Import-Export",
     "description": "Export the scene to a tray_rust scene",
     "category": "Import-Export"
@@ -126,7 +126,7 @@ def export_cameras(operator, context):
                 camera_json["fov_knots"] = knots
                 camera_json["fov_spline_degree"] = 1
             else:
-                camera_json["fov"] = math.degrees(cam.angle_y),
+                camera_json["fov"] = math.degrees(cam.angle_y)
             # Check if the camera object is moving
             if obj.animation_data and obj.animation_data.action:
                 camera_json["keyframes"] = export_animation(obj, convert_blender_matrix, scene)
