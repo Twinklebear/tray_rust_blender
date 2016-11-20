@@ -176,10 +176,13 @@ def export_mesh(obj, obj_file_name, mesh_transforms, scene):
             "file": obj_file_name,
             "model": obj.data.name,
         }
+	mat_name = "default_white_wall"
+	if obj.active_material:
+		mat_name = obj.active_material.name
     obj_json = {
         "name": obj.name,
         "type": "receiver",
-        "material": obj.active_material.name,
+        "material": mat_name,
         "geometry": geometry,
     }
 
@@ -201,10 +204,13 @@ def export_mesh(obj, obj_file_name, mesh_transforms, scene):
 
 def export_metaball(obj, mesh_transforms, scene):
     obj.select = False
+	mat_name = "default_white_wall"
+	if obj.active_material:
+		mat_name = obj.active_material.name
     obj_json = {
         "name": obj.name,
         "type": "receiver",
-        "material": obj.active_material.name,
+        "material": mat_name
         "geometry": {
             "type": "sphere",
             "radius": 1
