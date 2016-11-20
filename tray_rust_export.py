@@ -88,14 +88,25 @@ def export_integrator(operator, context):
 # TODO: Maybe we can add support for some of Blender's/Cycle's material models
 # and add UI for ones in tray_rust but not in Blender?
 def export_materials(operator, context):
-    return [
-        {
+    # TODO: Currently this just exports the viewport material info, we really want
+    # Cycle's material info, maybe just the first node I guess?
+    material_json = []
+    for name, mat in bpy.data.materials.items():
+        material_json.append({
             "type": "matte",
-            "name": "white_wall",
-            "diffuse": [0.740063, 0.742313, 0.733934],
+            "name": name,
+            "diffuse": [mat.diffuse_color.r, mat.diffuse_color.g, mat.diffuse_color.b],
             "roughness": 1.0
-        }
-    ]
+        })
+    # TODO: How will Blender's default material appear? do we still want to provide
+    # this default white one?
+    material_json.append({
+        "type": "matte",
+        "name": "default_white_wall",
+        "diffuse": [0.740063, 0.742313, 0.733934],
+        "roughness": 1.0
+    })
+    return material_json
 
 # Export the camera positon/motion from Blender
 def export_cameras(operator, context):
@@ -168,7 +179,7 @@ def export_mesh(obj, obj_file_name, mesh_transforms, scene):
     obj_json = {
         "name": obj.name,
         "type": "receiver",
-        "material": "white_wall",
+        "material": obj.active_material.name,
         "geometry": geometry,
     }
 
@@ -193,7 +204,7 @@ def export_metaball(obj, mesh_transforms, scene):
     obj_json = {
         "name": obj.name,
         "type": "receiver",
-        "material": "white_wall",
+        "material": obj.active_material.name,
         "geometry": {
             "type": "sphere",
             "radius": 1
@@ -257,7 +268,7 @@ def export_light(obj, mesh_transforms, scene):
                 "width": lamp.size,
                 "height": lamp.size_y
             }
-        obj_json["material"] = "white_wall"
+        obj_json["material"] = "default_white_wall"
         obj_json["emitter"] = "area"
         obj_json["emission"] = [0.780131, 0.780409, 0.775833, 100]
         obj_json["geometry"] = lamp_geometry
