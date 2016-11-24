@@ -9,7 +9,7 @@ from bpy_extras.io_utils import ExportHelper
 bl_info = {
     "name": "tray_rust export",
     "author": "Will Usher",
-    "blender": (2, 7, 6),
+    "blender": (2, 7, 8),
     "version": (0, 0, 5),
     "location": "File > Import-Export",
     "description": "Export the scene to a tray_rust scene",
@@ -157,25 +157,25 @@ def export_cameras(operator, context):
             cameras.append(camera_json)
     return cameras
 
-def export_mesh(obj, obj_file_name, mesh_transforms, scene):
+def export_mesh(obj, obj_file_name, mesh_transforms, selected_meshes, scene):
     geometry = {}
-    # If it's an instance we expect the real object to be exported without
-    # the .### in the name, so use that model in the OBJ file. To prevent exporting
-    # this object we also don't select it
-    if obj.name != obj.data.name:
-        obj.select = False
-        geometry = {
-            "type": "mesh",
-            "file": obj_file_name,
-            "model": obj.data.name,
-        }
-    else:
+    # Check if we've already found and selected the mesh used by this object and re-use
+    # that instance's data if so. Otherwise setup a new entry in our selected meshes
+    # so instances of this mesh can find the right model to export.
+    if not obj.data.name in selected_meshes:
         obj.select = True
-        geometry = {
-            "type": "mesh",
-            "file": obj_file_name,
-            "model": obj.data.name,
-        }
+        exported_name = obj.data.name
+        if obj.name != obj.data.name:
+            exported_name = obj.name + "_" + exported_name
+        selected_meshes[obj.data.name] = exported_name
+    else:
+        obj.select = False
+
+    geometry = {
+        "type": "mesh",
+        "file": obj_file_name,
+        "model": selected_meshes[obj.data.name],
+    }
 
     mat_name = "default_white_wall"
     if obj.active_material:
@@ -289,12 +289,13 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
     obj_path, obj_file_name = os.path.split(filepath)
     obj_file_name, _ = os.path.splitext(obj_file_name)
     obj_file_name += ".obj"
+    selected_meshes = {}
 
     # Add the scene objects
     for name, obj in scene.objects.items():
         # Append all the meshes in the scene
         if obj.type == "MESH":
-            objects.append(export_mesh(obj, obj_file_name, mesh_transforms, scene))
+            objects.append(export_mesh(obj, obj_file_name, mesh_transforms, selected_meshes, scene))
         # Convert meta balls to analytic spheres
         elif obj.type == "META":
             objects.append(export_metaball(obj, mesh_transforms, scene))
