@@ -10,7 +10,7 @@ bl_info = {
     "name": "tray_rust export",
     "author": "Will Usher",
     "blender": (2, 7, 8),
-    "version": (0, 0, 5),
+    "version": (0, 0, 6),
     "location": "File > Import-Export",
     "description": "Export the scene to a tray_rust scene",
     "category": "Import-Export"
