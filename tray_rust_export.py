@@ -34,13 +34,46 @@ def export_animation(obj, mat_convert, scene):
     frame_time = 1.0 / scene.render.fps
     knots = []
     control_points = []
-    anim_data = obj.animation_data
-    start = int(anim_data.action.frame_range[0])
-    end = int(math.ceil(anim_data.action.frame_range[1]))
+    start = None
+    end = None
+    parent_iter = obj
+    while parent_iter != None:
+        if parent_iter.animation_data and parent_iter.animation_data.action:
+            parent_anim_data = parent_iter.animation_data
+            if start == None and end == None:
+                start = int(parent_anim_data.action.frame_range[0])
+                end = int(math.ceil(parent_anim_data.action.frame_range[1]))
+            else:
+                start = min(start, int(parent_anim_data.action.frame_range[0]))
+                end = max(end, int(math.ceil(parent_anim_data.action.frame_range[1])))
+
+        if parent_iter.parent and parent_iter.parent_type == "OBJECT":
+            parent_iter = parent_iter.parent
+        else:
+            parent_iter = None
+
     knots.append((start - 1) * frame_time)
     for f in range(start - 1, end):
         scene.frame_set(f + 1)
-        mat = mat_convert(obj.matrix_world)
+
+        # Traverse the stack of parent objects and find the correct world space matrix
+        # for the child
+        if obj.parent and obj.parent_type == "OBJECT":
+            mat = obj.matrix_basis
+            child = obj
+            parent = obj.parent
+            while parent and child.parent_type == "OBJECT":
+                parent_mat = parent.matrix_world
+                if parent.parent and parent.parent_type == "OBJECT":
+                    parent_mat = parent.matrix_basis
+
+                mat = parent_mat * mat
+                child = parent
+                parent = parent.parent
+        else:
+            mat = obj.matrix_world
+
+        mat = mat_convert(mat)
         knots.append(f * frame_time)
         control_points.append({
             "transform": [
@@ -187,14 +220,40 @@ def export_mesh(obj, obj_file_name, mesh_transforms, selected_meshes, scene):
         "geometry": geometry,
     }
 
+    # Check if this object or anyone up its parent chain has animation (thus animating it)
     mesh_transforms[obj.name] = obj.matrix_world.copy()
-    if obj.animation_data and obj.animation_data.action:
+    has_animation = False
+    #if obj.parent and obj.parent_type == "OBJECT":
+    # What transform should we place here?
+    #mesh_transforms[obj.name] = obj.matrix_local.copy()
+    parent_iter = obj
+    while parent_iter != None:
+        has_animation = has_animation or (parent_iter.animation_data and parent_iter.animation_data.action)
+        if parent_iter.parent and parent_iter.parent_type == "OBJECT":
+            parent_iter = parent_iter.parent
+        else:
+            parent_iter = None
+
+    if has_animation:
         obj_json["keyframes"] = export_animation(obj, convert_obj_matrix, scene)
-        # Mute keyframe animation so it doesn't block (location|rotation|scale)_clear
-        for curve in obj.animation_data.action.fcurves:
-            curve.mute = True
     else:
-        obj_mat = convert_obj_matrix(obj.matrix_world)
+        mat = obj.matrix_world.copy()
+        # Traverse the stack of parent objects and find the correct world space matrix
+        # for the child
+        if obj.parent and obj.parent_type == "OBJECT":
+            mat = obj.matrix_basis
+            child = obj
+            parent = obj.parent
+            while parent and child.parent_type == "OBJECT":
+                parent_mat = parent.matrix_world
+                if parent.parent and parent.parent_type == "OBJECT":
+                    parent_mat = parent.matrix_basis
+
+                mat = parent_mat * mat
+                child = parent
+                parent = parent.parent
+
+        obj_mat = convert_obj_matrix(mat)
         obj_json["transform"] = [
                 {
                     "type": "matrix",
@@ -306,6 +365,12 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
     # Make sure the camera isn't selected before clearing position data
     camera = scene.objects["Camera"].select = False
 
+    # Mute keyframe animation so it doesn't block (location|rotation|scale)_clear
+    for name, obj in scene.objects.items():
+        if obj.animation_data and obj.animation_data.action:
+            for curve in obj.animation_data.action.fcurves:
+                curve.mute = True
+
     # Reset all transformations
     bpy.ops.object.location_clear()
     bpy.ops.object.rotation_clear()
@@ -356,7 +421,7 @@ def menu_func(self, context):
 
 def register():
     bpy.utils.register_module(__name__)
-    bpy.types.INFO_MT_file_export.append(menu_func)
+    #bpy.types.INFO_MT_file_export.append(menu_func)
 
 def unregister():
     bpy.utils.unregister_module(__name__)
