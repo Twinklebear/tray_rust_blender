@@ -10,7 +10,7 @@ bl_info = {
     "name": "tray_rust export",
     "author": "Will Usher",
     "blender": (2, 7, 8),
-    "version": (0, 0, 6),
+    "version": (0, 0, 7),
     "location": "File > Import-Export",
     "description": "Export the scene to a tray_rust scene",
     "category": "Import-Export"
@@ -31,6 +31,7 @@ def convert_obj_matrix(mat):
 # system. Returns the dict of control points, knots and degree required to specify the curve
 # for the animation in the scene file
 def export_animation(obj, mat_convert, scene):
+    current_frame = scene.frame_current
     frame_time = 1.0 / scene.render.fps
     knots = []
     control_points = []
@@ -55,25 +56,7 @@ def export_animation(obj, mat_convert, scene):
     knots.append((start - 1) * frame_time)
     for f in range(start - 1, end):
         scene.frame_set(f + 1)
-
-        # Traverse the stack of parent objects and find the correct world space matrix
-        # for the child
-        if obj.parent and obj.parent_type == "OBJECT":
-            mat = obj.matrix_basis
-            child = obj
-            parent = obj.parent
-            while parent and child.parent_type == "OBJECT":
-                parent_mat = parent.matrix_world
-                if parent.parent and parent.parent_type == "OBJECT":
-                    parent_mat = parent.matrix_basis
-
-                mat = parent_mat * mat
-                child = parent
-                parent = parent.parent
-        else:
-            mat = obj.matrix_world
-
-        mat = mat_convert(mat)
+        mat = mat_convert(obj.matrix_world)
         knots.append(f * frame_time)
         control_points.append({
             "transform": [
@@ -83,7 +66,7 @@ def export_animation(obj, mat_convert, scene):
                 }
             ]})
     knots.append((end - 1) * frame_time)
-    scene.frame_set(1)
+    scene.frame_set(current_frame)
     return {
         "control_points": control_points,
         "knots": knots,
@@ -190,7 +173,7 @@ def export_cameras(operator, context):
             cameras.append(camera_json)
     return cameras
 
-def export_mesh(obj, obj_file_name, mesh_transforms, selected_meshes, scene):
+def export_mesh(obj, obj_file_name, mesh_transforms, selected_meshes, parents_to_restore, scene):
     geometry = {}
     # Check if we've already found and selected the mesh used by this object and re-use
     # that instance's data if so. Otherwise setup a new entry in our selected meshes
@@ -223,9 +206,6 @@ def export_mesh(obj, obj_file_name, mesh_transforms, selected_meshes, scene):
     # Check if this object or anyone up its parent chain has animation (thus animating it)
     mesh_transforms[obj.name] = obj.matrix_world.copy()
     has_animation = False
-    #if obj.parent and obj.parent_type == "OBJECT":
-    # What transform should we place here?
-    #mesh_transforms[obj.name] = obj.matrix_local.copy()
     parent_iter = obj
     while parent_iter != None:
         has_animation = has_animation or (parent_iter.animation_data and parent_iter.animation_data.action)
@@ -237,29 +217,16 @@ def export_mesh(obj, obj_file_name, mesh_transforms, selected_meshes, scene):
     if has_animation:
         obj_json["keyframes"] = export_animation(obj, convert_obj_matrix, scene)
     else:
-        mat = obj.matrix_world.copy()
-        # Traverse the stack of parent objects and find the correct world space matrix
-        # for the child
-        if obj.parent and obj.parent_type == "OBJECT":
-            mat = obj.matrix_basis
-            child = obj
-            parent = obj.parent
-            while parent and child.parent_type == "OBJECT":
-                parent_mat = parent.matrix_world
-                if parent.parent and parent.parent_type == "OBJECT":
-                    parent_mat = parent.matrix_basis
-
-                mat = parent_mat * mat
-                child = parent
-                parent = parent.parent
-
-        obj_mat = convert_obj_matrix(mat)
+        obj_mat = convert_obj_matrix(obj.matrix_world)
         obj_json["transform"] = [
                 {
                     "type": "matrix",
                     "matrix": [obj_mat[0][0:], obj_mat[1][0:], obj_mat[2][0:], obj_mat[3][0:]]
                 }
             ]
+    if obj.parent:
+        parents_to_restore.append((obj, obj.parent))
+        obj.parent = None
     return obj_json
 
 def export_metaball(obj, mesh_transforms, scene):
@@ -344,6 +311,7 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
     scene = context.scene
 
     mesh_transforms = {}
+    parents_to_restore = []
     objects = []
     obj_path, obj_file_name = os.path.split(filepath)
     obj_file_name, _ = os.path.splitext(obj_file_name)
@@ -354,7 +322,8 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
     for name, obj in scene.objects.items():
         # Append all the meshes in the scene
         if obj.type == "MESH":
-            objects.append(export_mesh(obj, obj_file_name, mesh_transforms, selected_meshes, scene))
+            objects.append(export_mesh(obj, obj_file_name, mesh_transforms, selected_meshes,
+                           parents_to_restore, scene))
         # Convert meta balls to analytic spheres
         elif obj.type == "META":
             objects.append(export_metaball(obj, mesh_transforms, scene))
@@ -367,7 +336,7 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
 
     # Mute keyframe animation so it doesn't block (location|rotation|scale)_clear
     for name, obj in scene.objects.items():
-        if obj.animation_data and obj.animation_data.action:
+        if obj.type == "MESH" and obj.animation_data and obj.animation_data.action:
             for curve in obj.animation_data.action.fcurves:
                 curve.mute = True
 
@@ -381,6 +350,10 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
         axis_forward="Z", axis_up="Y", use_materials=False, use_uvs=True, use_normals=True,
         use_triangles=True, use_selection=True)
 
+    # Restore all cleared parenting
+    for (obj, par) in parents_to_restore:
+        obj.parent = par
+
     # Restore all transformations
     for name, obj in scene.objects.items():
         if obj.type == "MESH" or obj.type == "META" or obj.type == "LAMP":
@@ -392,7 +365,7 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
                     curve.mute = False
 
     # Save out the JSON scene file
-    scene = {
+    json_scene = {
         "film": export_film(operator, context),
         "cameras": export_cameras(operator, context),
         "integrator": export_integrator(operator, context),
@@ -400,7 +373,7 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
         "objects": objects
     }
     with open(filepath, "w") as f:
-        json.dump(scene, f, indent=4)
+        json.dump(json_scene, f, indent=4)
 
     return { "FINISHED" }
 
@@ -421,7 +394,7 @@ def menu_func(self, context):
 
 def register():
     bpy.utils.register_module(__name__)
-    bpy.types.INFO_MT_file_export.append(menu_func)
+    #bpy.types.INFO_MT_file_export.append(menu_func)
 
 def unregister():
     bpy.utils.unregister_module(__name__)
