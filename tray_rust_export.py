@@ -10,7 +10,7 @@ bl_info = {
     "name": "tray_rust export",
     "author": "Will Usher",
     "blender": (2, 7, 8),
-    "version": (0, 0, 7),
+    "version": (0, 0, 8),
     "location": "File > Import-Export",
     "description": "Export the scene to a tray_rust scene",
     "category": "Import-Export"
@@ -51,7 +51,7 @@ def export_animation(obj, mat_convert, scene):
         if parent_iter.parent and parent_iter.parent_type == "OBJECT":
             parent_iter = parent_iter.parent
         else:
-            parent_iter = None
+            break
 
     knots.append((start - 1) * frame_time)
     for f in range(start - 1, end):
@@ -208,11 +208,13 @@ def export_mesh(obj, obj_file_name, mesh_transforms, selected_meshes, parents_to
     has_animation = False
     parent_iter = obj
     while parent_iter != None:
-        has_animation = has_animation or (parent_iter.animation_data and parent_iter.animation_data.action)
+        if parent_iter.animation_data and parent_iter.animation_data.action:
+            has_animation = True
+            break
         if parent_iter.parent and parent_iter.parent_type == "OBJECT":
             parent_iter = parent_iter.parent
         else:
-            parent_iter = None
+            break
 
     if has_animation:
         obj_json["keyframes"] = export_animation(obj, convert_obj_matrix, scene)
@@ -226,7 +228,6 @@ def export_mesh(obj, obj_file_name, mesh_transforms, selected_meshes, parents_to
             ]
     if obj.parent:
         parents_to_restore.append((obj, obj.parent))
-        obj.parent = None
     return obj_json
 
 def export_metaball(obj, mesh_transforms, scene):
@@ -339,6 +340,10 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
         if obj.type == "MESH" and obj.animation_data and obj.animation_data.action:
             for curve in obj.animation_data.action.fcurves:
                 curve.mute = True
+    # Clear all parents before clearing positions so we can get the objects actually at
+    # their origin transform
+    for (obj, par) in parents_to_restore:
+        obj.parent = None
 
     # Reset all transformations
     bpy.ops.object.location_clear()
