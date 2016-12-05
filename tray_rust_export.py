@@ -270,11 +270,20 @@ def export_light(obj, mesh_transforms, scene):
         "type": "emitter"
     }
     mesh_transforms[obj.name] = obj.matrix_world.copy()
-    if obj.animation_data and obj.animation_data.action:
+
+    has_animation = False
+    parent_iter = obj
+    while parent_iter != None:
+        if parent_iter.animation_data and parent_iter.animation_data.action:
+            has_animation = True
+            break
+        if parent_iter.parent and parent_iter.parent_type == "OBJECT":
+            parent_iter = parent_iter.parent
+        else:
+            break
+
+    if has_animation:
         obj_json["keyframes"] = export_animation(obj, convert_blender_matrix, scene)
-        # Mute keyframe animation so it doesn't block (location|rotation|scale)_clear
-        for curve in obj.animation_data.action.fcurves:
-            curve.mute = True
     else:
         obj_mat = convert_blender_matrix(obj.matrix_world)
         obj_json["transform"] = [
@@ -337,7 +346,7 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
 
     # Mute keyframe animation so it doesn't block (location|rotation|scale)_clear
     for name, obj in scene.objects.items():
-        if obj.type == "MESH" and obj.animation_data and obj.animation_data.action:
+        if obj.animation_data and obj.animation_data.action:
             for curve in obj.animation_data.action.fcurves:
                 curve.mute = True
     # Clear all parents before clearing positions so we can get the objects actually at
