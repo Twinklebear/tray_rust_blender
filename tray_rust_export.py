@@ -10,7 +10,7 @@ bl_info = {
     "name": "tray_rust export",
     "author": "Will Usher",
     "blender": (2, 7, 8),
-    "version": (0, 0, 9),
+    "version": (0, 0, 10),
     "location": "File > Import-Export",
     "description": "Export the scene to a tray_rust scene",
     "category": "Import-Export"
@@ -341,6 +341,8 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
         elif obj.type == "LAMP":
             objects.append(export_light(obj, mesh_transforms, scene))
 
+    cameras = export_cameras(operator, context)
+
     # Make sure the camera isn't selected before clearing position data
     camera = scene.objects["Camera"].select = False
 
@@ -381,7 +383,7 @@ def export_tray_rust(operator, context, filepath="", check_existing=False):
     # Save out the JSON scene file
     json_scene = {
         "film": export_film(operator, context),
-        "cameras": export_cameras(operator, context),
+        "cameras": cameras,
         "integrator": export_integrator(operator, context),
         "materials": export_materials(operator, context),
         "objects": objects
